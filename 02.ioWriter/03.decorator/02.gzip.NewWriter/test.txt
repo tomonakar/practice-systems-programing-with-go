@@ -1,0 +1,1 @@
+gzip.Writer example

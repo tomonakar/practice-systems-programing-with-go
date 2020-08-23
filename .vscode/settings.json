@@ -1,0 +1,18 @@
+{
+	"go.languageServerExperimentalFeatures": {
+		"format": false,
+		"autoComplete": true,
+		"rename": true,
+		"goToDefinition": true,
+		"hover": true,
+		"signatureHelp": true,
+		"goToTypeDefinition": true,
+		"documentSymbols": true,
+		"workspaceSymbols": true,
+		"findReferences": true,
+		"diagnostics": true,
+		"documentLink": true,
+		"goToImplementation": true,
+		"incrementalSync": true
+	}
+}
