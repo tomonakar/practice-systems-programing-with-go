@@ -82,13 +82,14 @@ io.CopyBuffer(writer, reader, buffer)
 
 ### 入出力関連インターフェースのキャスト
 
-引数に`io.ReadCloser`が要求されているが、今あ流オブジェクトはio.Readerしか満たしてないという場合がある。
+引数に`io.ReadCloser`が要求されているが、今あるオブジェクトはio.Readerしか満たしてないという場合がある。
 例えば、ソケット読み込み用の関数を作成していて、その関数の引数はio.ReadCloserだが、
 ユニットテストにはio.Readerインターフェースを満たすString.Readerや
 bytes.Bufferを使いたいというケースが考えられる。
 
 その場合は、ioutil.NopCloser()関数を使うと、ダミーのCloser()メソッドを持って、
 io.ReadCloserのふりをするラッパーオブジェクトを得られる。
+
 ```go
 import (
   "io"
@@ -98,4 +99,122 @@ import (
 
 var reader io.Reader = strings.NewReader("テストデータ")
 var readCloser io.ReadCloser = ioutil.NopCloser(reader)
+```
+
+## io.Readerの構造体を満たしよく使うもの
+### 標準入力: os.Stdin
+
+標準入力の構造体はos.Stdin.
+以下のプログラムを実行すると入力待ちになり、以降はEnterが押されるたびに結果が帰ってくる。
+Ctrl+Dで終了する。
+
+```go
+package main
+
+import (
+  "fmt"
+  "io"
+  "os"
+)
+
+func main() {
+  for {
+    buffer := make([]bytes, 5)
+    size, err := os.Stdin.Read(buffer)
+    if err := io.EOF {
+      fmt.Println("EOF")
+      break
+    }
+    fmt.Printf("size=%d input='%s'\n", size, string(buffer))
+  }
+}
+```
+
+以下のようにすると、自身のプログラムを指定したバッファサイズ（ここでは５）ごとに区切って表示する
+
+```sh
+$ go run stdin.go < stdin.go
+```
+
+### ファイル入力: os.File
+ファイル入力はos.File構造体を使う.
+ファイルの新規作成はos.Create()関数で実行する。
+os.Open()を使うと既存ファイルを開くことができる。
+
+```go
+func Open(name string) (*File, error) {
+  return OpenFile(name, O_RDONLY, O)
+}
+func Create(name string) (*File, error) {
+  return OpenFIle(name, O_RDWR|O_CREATE|O_TRUNC, 06666)
+}
+```
+
+ファイル読み込みの例。
+io.Copy()を使い、標準出力にファイルの内容を書き出している。
+```go
+package main
+import (
+  "io"
+  "os"
+)
+func main() {
+  file, err := os.Open("file.go")
+  if err != nil {
+    panic(err)
+  }
+  defer file.Close()
+  io.Copy(os.Stdout, file)
+}
+```
+
+### ネットワーク通信の読み込み
+
+net.Dial()で返えされるconnがnet.Conn型で、これをio.Copyを使って標準出力にコピーすることでデータを一括して読み込んでいる。
+以下のコードではコピーする内容は生のHTTP通信内容そのもの。
+
+```go
+package main
+import (
+  "io"
+  "os"
+  "net"
+)
+
+func main() {
+  conn, err := net.Dial("tcp", "ascii.jp:80")
+  if err != nil {
+    panic(err)
+  }
+  conn.Write([]byte("GET / HTTP/1.0/\r\nHOST: ascii.jp\r\n\r\n"))
+  io.Copy(os.Stdout, conn)
+}
+```
+
+上記だと、HTTPを読み込む際に、RFCにしたがって通信内容をパースする必要が生じる。
+`http.ReadResponse()`を使うことでHTTP通信をパースして使いやすくしてくれる。
+
+
+```go
+package main
+import (
+  "io"
+  "os"
+  "net"
+)
+
+func main() {
+  conn, err := net.Dial("tcp", "ascii.jp:80")
+  if err != nil {
+    panic(err)
+  }
+  conn.Write([]byte("GET / HTTP/1.0/\r\nHOST: ascii.jp\r\n\r\n"))
+  res, err := http.ReadResponse(bufio.NewReader(conn), nil)
+
+  // ヘッダーを表示
+  fmt.Printl(res.Header)
+  //ボディを表示.ボディ表示後はClose()する必要がある
+  defer res.Body.Close()
+  io.Copy(os.Stdout, res.Body)
+}
 ```
